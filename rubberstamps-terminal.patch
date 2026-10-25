@@ -1,0 +1,45 @@
+--- a/rubberstamps/__init__.py
++++ b/rubberstamps/__init__.py
+@@ -13,6 +13,10 @@
+ 	UI_TEXT = "ui_text"
+ 	UI_SUBTEXT = "ui_subtext"
+ 
++	def __init__(self):
++		# Last line written to each ui field, used to skip repeated countdown ticks
++		self.last_terminal_text = {}
++
+ 	def set_ui_text(self, text, type=None):
+ 		"""Convert an ui string to input howdy-gtk understands"""
+ 		typedec = "M"
+@@ -39,6 +43,22 @@
+ 			# Write a padding line to force the command through any buffers
+ 			self.gtk_proc.stdin.write(bytearray("P=_PADDING \n".encode("utf-8")))
+ 			self.gtk_proc.stdin.flush()
++		else:
++			# Without howdy-gtk there is nothing to write to, so the stamp would
++			# run invisibly and abort on timeout. Write to stderr instead, which
++			# reaches the terminal through pam.
++			text = command.strip()
++			typedec = ""
++
++			# Split off the "M=" or "S=" type declaration meant for the ui
++			if text[1:2] == "=":
++				typedec = text[:1]
++				text = text[2:]
++
++			# The countdown is refreshed 10 times a second, only print changes
++			if text and text != self.last_terminal_text.get(typedec):
++				self.last_terminal_text[typedec] = text
++				print(text, file=sys.stderr, flush=True)
+ 
+ 
+ def execute(config, gtk_proc, opencv):
+@@ -73,7 +93,7 @@
+ 			continue
+ 
+ 		# Parse the rule with regex
+-		regex_result = re.search("^(\w+)\s+([\w\.]+)\s+([a-z]+)(.*)?$", rule, re.IGNORECASE)
++		regex_result = re.search(r"^(\w+)\s+([\w\.]+)\s+([a-z]+)(.*)?$", rule, re.IGNORECASE)
+ 
+ 		# Error out if the regex did not match (invalid line)
+ 		if not regex_result:
